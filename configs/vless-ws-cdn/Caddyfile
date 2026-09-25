@@ -1,0 +1,21 @@
+# Caddy front for VLESS + WS behind Cloudflare (orange cloud).
+# - Serves a plausible decoy site on /
+# - Reverse-proxies ONLY the secret WebSocket path to Xray (127.0.0.1:8080)
+# - Auto-obtains a Let's Encrypt cert so Cloudflare SSL mode "Full (strict)" works
+#
+# Replace: your.domain.example  and  /REPLACE-WITH-SECRET-PATH  (match Xray)
+
+your.domain.example {
+	encode gzip
+
+	# The secret proxy path -> Xray VLESS+WS inbound
+	@vpn {
+		path /REPLACE-WITH-SECRET-PATH
+	}
+	reverse_proxy @vpn 127.0.0.1:8080
+
+	# Everything else looks like an ordinary website (decoy).
+	# Put real, boring static content in /var/www/decoy.
+	root * /var/www/decoy
+	file_server
+}

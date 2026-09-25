@@ -1,0 +1,47 @@
+{
+  "//": "Xray VLESS + Reality server. Point DNS at this VPS with GREY CLOUD (DNS-only) or use the raw IP. NEVER put Reality behind Cloudflare's orange cloud.",
+  "//generate": "xray x25519 (keys), xray uuid (id), openssl rand -hex 8 (shortId)",
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "REPLACE-WITH-UUID",
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "//dest": "A popular site reachable from Iran, TLS1.3 + HTTP/2, not filtered. TEST IT.",
+          "dest": "REPLACE-WITH-BORROWED-HOST:443",
+          "xver": 0,
+          "serverNames": [
+            "REPLACE-WITH-BORROWED-HOST"
+          ],
+          "privateKey": "REPLACE-WITH-PRIVATE-KEY",
+          "shortIds": [
+            "",
+            "REPLACE-WITH-SHORTID"
+          ]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"]
+      }
+    }
+  ],
+  "outbounds": [
+    { "protocol": "freedom", "tag": "direct" },
+    { "protocol": "blackhole", "tag": "block" }
+  ]
+}

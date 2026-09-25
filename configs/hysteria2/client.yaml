@@ -1,0 +1,25 @@
+# Hysteria2 client. Point at your server. Port hopping (mport) spreads traffic
+# across a UDP port range so there is no single port to block — configure the
+# same range in your firewall to forward to the server's :443.
+
+server: your.domain.example:443
+
+# Port hopping: use a range instead of a single port (optional but recommended).
+# server: your.domain.example:20000-50000
+
+auth: REPLACE-WITH-STRONG-PASSWORD
+
+tls:
+  sni: your.domain.example
+  # insecure: false   # keep verification ON with a real cert
+
+# Realistic bandwidth caps help Brutal CC push through throttled links.
+bandwidth:
+  up: 50 mbps
+  down: 100 mbps
+
+# Local proxies the client exposes for apps/system.
+socks5:
+  listen: 127.0.0.1:10808
+http:
+  listen: 127.0.0.1:10809

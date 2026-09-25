@@ -1,0 +1,12 @@
+# Keep real secrets out of the repo. Fill in templates under these names.
+*.local.json
+*.local.yaml
+*.local.yml
+config.local.*
+secrets*
+*.key
+*.pem
+*.crt
+# Editor / OS noise
+.DS_Store
+*.swp

@@ -1,0 +1,27 @@
+{
+  "//": "Xray VLESS + WebSocket inbound. NO TLS here — Caddy terminates TLS and Cloudflare fronts it. Listens on localhost; Caddy reverse-proxies the secret WS path to it.",
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 8080,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          { "id": "REPLACE-WITH-UUID" }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "//path": "Keep this secret and unique per server. Must match the Caddy route.",
+          "path": "/REPLACE-WITH-SECRET-PATH"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    { "protocol": "freedom", "tag": "direct" }
+  ]
+}

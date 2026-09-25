@@ -1,0 +1,33 @@
+# Hysteria2 server (QUIC/UDP). Fast under throttling; supports port hopping.
+# Needs a valid TLS cert for the listen domain (use a real domain with certs,
+# or Hysteria's ACME). This is your "fast lane" — pair it with a TCP transport
+# (Reality) since Iran degrades UDP during hard crackdowns.
+
+listen: :443
+
+# Option 1: ACME (Hysteria obtains the cert). Requires the domain to resolve here.
+acme:
+  domains:
+    - your.domain.example
+  email: you@example.com
+
+# Option 2 (instead of acme): bring your own cert
+# tls:
+#   cert: /etc/hysteria/fullchain.pem
+#   key: /etc/hysteria/privkey.pem
+
+auth:
+  type: password
+  password: REPLACE-WITH-STRONG-PASSWORD
+
+# Masquerade as a normal HTTPS site to anyone who probes the endpoint.
+masquerade:
+  type: proxy
+  proxy:
+    url: https://REPLACE-WITH-A-REAL-SITE/
+    rewriteHost: true
+
+# Optional bandwidth hints (Brutal congestion control uses these).
+bandwidth:
+  up: 100 mbps
+  down: 100 mbps

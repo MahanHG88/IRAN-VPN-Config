@@ -1,0 +1,38 @@
+{
+  "//": "Xray VLESS + WS + TLS client, connecting THROUGH Cloudflare. address/sni = your Cloudflare-fronted hostname. port 443. path = the secret WS path.",
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    { "listen": "127.0.0.1", "port": 10808, "protocol": "socks", "settings": { "udp": true } },
+    { "listen": "127.0.0.1", "port": 10809, "protocol": "http" }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "your.domain.example",
+            "port": 443,
+            "users": [
+              { "id": "REPLACE-WITH-UUID", "encryption": "none" }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "your.domain.example",
+          "fingerprint": "chrome"
+        },
+        "wsSettings": {
+          "path": "/REPLACE-WITH-SECRET-PATH",
+          "headers": { "Host": "your.domain.example" }
+        }
+      },
+      "tag": "proxy"
+    },
+    { "protocol": "freedom", "tag": "direct" }
+  ]
+}

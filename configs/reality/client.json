@@ -1,0 +1,50 @@
+{
+  "//": "Xray VLESS + Reality client. address = your VPS IP or a GREY-CLOUD DNS name pointing at it. publicKey = the server's PUBLIC key (from `xray x25519`).",
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "settings": { "udp": true }
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 10809,
+      "protocol": "http"
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "REPLACE-WITH-VPS-IP",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE-WITH-UUID",
+                "flow": "xtls-rprx-vision",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "REPLACE-WITH-BORROWED-HOST",
+          "fingerprint": "chrome",
+          "publicKey": "REPLACE-WITH-PUBLIC-KEY",
+          "shortId": "REPLACE-WITH-SHORTID",
+          "spiderX": "/"
+        }
+      },
+      "tag": "proxy"
+    },
+    { "protocol": "freedom", "tag": "direct" }
+  ]
+}

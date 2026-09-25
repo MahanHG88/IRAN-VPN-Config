@@ -29,6 +29,21 @@ Cloudflare: point the **orange-cloud** A record at the VPS, set the SSL mode it
 tells you, and import the printed link into Hiddify. The manual steps below
 explain what the script automates.
 
+## Running it on the same VPS as Reality (or a panel)
+
+If port **443 is already taken** by a direct Reality server or a panel (3x-ui /
+Marzban / x-ui), Caddy can't use 443. The script handles this automatically:
+
+- It binds Caddy to **8443** instead (a Cloudflare-supported HTTPS origin port),
+  leaving 443 to Reality.
+- You then add **one Cloudflare Origin Rule**: *Rules → Origin Rules → if
+  hostname equals `<domain>` → Rewrite to Port = 8443*. Visitors still connect on
+  443; Cloudflare dials your origin on 8443.
+- The WS inbound runs in a dedicated Xray on `127.0.0.1:<port>`, separate from
+  your panel's Xray, so the panel and Reality are untouched.
+
+Cloudflare-supported origin HTTPS ports: 443, 8443, 2053, 2083, 2087, 2096.
+
 ## Architecture
 
 ```

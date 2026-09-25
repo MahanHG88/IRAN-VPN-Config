@@ -13,7 +13,10 @@
 #       - Caddy: writes /etc/caddy/conf.d/cf-vpn.caddy and adds an import line
 #   * backs up every file it changes (<file>.bak.<timestamp>)
 #   * validates Xray and Caddy configs BEFORE restarting; restores + aborts on error
-#   * auto-picks a free local port; detects :443 conflicts and warns
+#   * auto-picks a free local port for the WS inbound
+#   * if :443 is taken (e.g. Reality panel), auto-uses origin port 8443 and tells
+#     you the one Cloudflare "Origin Rule" to add — Reality keeps 443
+#   * creates a caddy.service if Caddy is a bare binary with no service
 #   * safe to re-run: updates its own inbound/snippet, never duplicates
 #
 # Usage:
@@ -28,18 +31,16 @@
 #   --uuid <uuid>     Reuse a specific UUID (default: generated / reused if present).
 #   --path </p>       Reuse a specific WS path (default: /<random>, or existing).
 #   --name <label>    Label shown in the client app (default: CF-<domain>).
-#   --port <n>        Public HTTPS port Caddy binds (default: 443).
+#   --port <n>        Force the origin port Caddy binds (default: 443, or 8443 if
+#                     443 is busy). Cloudflare-supported HTTPS origin ports:
+#                     443, 8443, 2053, 2083, 2087, 2096.
 #   --uninstall       Remove ONLY what this script added (its inbound, snippet,
 #                     decoy, cert) and leave the rest of Xray/Caddy intact.
-#
-# After running, in the Cloudflare dashboard: (1) DNS A record <domain> -> this
-# VPS IP, PROXIED (orange). (2) SSL/TLS mode: Full (or Full (strict) with --cert).
-# (3) WebSockets ON (default). Then import the printed link into Hiddify.
 #
 set -euo pipefail
 
 DOMAIN=""; CERT=""; KEY=""; UUID=""; WSPATH=""; NAME=""; UNINSTALL=0
-PUBLIC_PORT=443
+PUBLIC_PORT=443; PORT_SET=0; NEED_ORIGIN_RULE=0
 XRAY_CONF=/usr/local/etc/xray/config.json
 CADDY_MAIN=/etc/caddy/Caddyfile
 CADDY_SNIPPET_DIR=/etc/caddy/conf.d
@@ -52,12 +53,7 @@ STAMP="$(date +%Y%m%d%H%M%S)"
 log()  { printf '\033[1;36m[cf-vpn]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[cf-vpn]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[cf-vpn] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
-
-backup() { # back up a file if it exists; echoes the backup path
-  [ -f "$1" ] || return 0
-  cp -a "$1" "$1.bak.$STAMP"
-  log "backed up $1 -> $1.bak.$STAMP"
-}
+backup() { [ -f "$1" ] || return 0; cp -a "$1" "$1.bak.$STAMP"; log "backed up $1 -> $1.bak.$STAMP"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -67,9 +63,9 @@ while [ $# -gt 0 ]; do
     --uuid)   UUID="${2:-}"; shift 2 ;;
     --path)   WSPATH="${2:-}"; shift 2 ;;
     --name)   NAME="${2:-}"; shift 2 ;;
-    --port)   PUBLIC_PORT="${2:-}"; shift 2 ;;
+    --port)   PUBLIC_PORT="${2:-}"; PORT_SET=1; shift 2 ;;
     --uninstall) UNINSTALL=1; shift ;;
-    -h|--help) sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option: $1 (try --help)" ;;
   esac
 done
@@ -77,76 +73,91 @@ done
 [ "$(id -u)" -eq 0 ] || die "run as root (use sudo)."
 command -v apt-get >/dev/null 2>&1 || die "this script targets Debian/Ubuntu (apt)."
 
+port_holder() { # prints the process name holding tcp port $1, or empty
+  ss -tlnpH 2>/dev/null | awk -v p=":$1" '$4 ~ p"$"{print}' \
+    | grep -oE 'users:\(\("[^"]+' | grep -oE '[^"]+$' | head -1 || true
+}
+
 # ---------------------------------------------------------------------------
-# UNINSTALL: remove only what we added.
+# UNINSTALL
 # ---------------------------------------------------------------------------
 if [ "$UNINSTALL" -eq 1 ]; then
   log "uninstalling cf-vpn additions (leaving the rest intact)…"
   if [ -f "$XRAY_CONF" ] && command -v jq >/dev/null 2>&1 && jq -e . "$XRAY_CONF" >/dev/null 2>&1; then
-    backup "$XRAY_CONF"
-    tmp="$(mktemp)"
+    backup "$XRAY_CONF"; tmp="$(mktemp)"
     jq --arg tag "$XRAY_TAG" '.inbounds |= map(select(.tag != $tag))' "$XRAY_CONF" > "$tmp" && mv "$tmp" "$XRAY_CONF"
-    log "removed the $XRAY_TAG inbound from Xray"
-    systemctl restart xray 2>/dev/null || true
+    log "removed the $XRAY_TAG inbound from Xray"; systemctl restart xray 2>/dev/null || true
   fi
   if [ -f "$CADDY_SNIPPET" ]; then
     rm -f "$CADDY_SNIPPET"; log "removed $CADDY_SNIPPET"
     systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
   fi
-  log "left in place (delete manually if you want): $CERT_DIR, $DECOY_DIR"
-  log "done."
-  exit 0
+  log "left in place (delete manually if unused): $CERT_DIR, $DECOY_DIR, caddy.service"
+  log "done."; exit 0
 fi
 
 [ -n "$DOMAIN" ] || die "--domain is required (e.g. --domain mooooz.lol)"
 [ -n "$NAME" ] || NAME="CF-${DOMAIN}"
 if [ -n "$CERT" ] && [ -z "$KEY" ]; then die "--cert given without --key"; fi
 if [ -n "$KEY" ] && [ -z "$CERT" ]; then die "--key given without --cert"; fi
-
-# WS path must start with a single slash.
 if [ -z "$WSPATH" ]; then WSPATH="/$(openssl rand -hex 6 2>/dev/null || head -c6 /dev/urandom | xxd -p)"; fi
 case "$WSPATH" in /*) ;; *) WSPATH="/$WSPATH" ;; esac
 
 # ---------------------------------------------------------------------------
-# Dependencies (install only what's missing).
+# Dependencies (only what's missing)
 # ---------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
 need_apt_update=1
-apt_install() {
-  [ "$need_apt_update" -eq 1 ] && { apt-get update -y >/dev/null; need_apt_update=0; }
-  apt-get install -y "$@" >/dev/null
-}
+apt_install() { [ "$need_apt_update" -eq 1 ] && { apt-get update -y >/dev/null; need_apt_update=0; }; apt-get install -y "$@" >/dev/null; }
 
 log "checking base tools…"
-for pkg in curl openssl jq qrencode ca-certificates; do
-  command -v "${pkg/ca-certificates/update-ca-certificates}" >/dev/null 2>&1 || apt_install "$pkg"
-done
-command -v jq >/dev/null 2>&1 || apt_install jq
+command -v curl     >/dev/null 2>&1 || apt_install curl
+command -v openssl  >/dev/null 2>&1 || apt_install openssl
+command -v jq       >/dev/null 2>&1 || apt_install jq
 command -v qrencode >/dev/null 2>&1 || apt_install qrencode
 
-# ---- Xray (detect / install) ----
+# ---- Xray ----
 if command -v xray >/dev/null 2>&1; then
-  log "Xray: already installed ($(xray version 2>/dev/null | head -1 || echo present)) — leaving it as is"
+  log "Xray: already installed — leaving it as is"
 else
   log "Xray: not found — installing Xray-core"
   bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 fi
 
-# ---- Caddy (detect / install) ----
+# ---- Caddy ----
 if command -v caddy >/dev/null 2>&1; then
-  log "Caddy: already installed ($(caddy version 2>/dev/null | head -1 || echo present)) — leaving it as is"
+  log "Caddy: already installed ($(caddy version 2>/dev/null | head -1)) — leaving the binary as is"
 else
   log "Caddy: not found — installing Caddy"
-  apt_install debian-keyring debian-archive-keyring apt-transport-https gnupg
+  apt_install debian-keyring debian-archive-keyring apt-transport-https gnupg ca-certificates
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
   need_apt_update=1; apt_install caddy
 fi
 
 # ---------------------------------------------------------------------------
-# IDs, cert, decoy.
+# Decide the origin port BEFORE writing configs.
 # ---------------------------------------------------------------------------
-# Reuse an existing cfvpn-ws UUID if present (idempotent re-runs).
+holder="$(port_holder "$PUBLIC_PORT")"
+if [ -n "$holder" ] && [ "$holder" != "caddy" ]; then
+  if [ "$PORT_SET" -eq 0 ]; then
+    warn "port ${PUBLIC_PORT} is held by '${holder}' (likely your Reality)."
+    PUBLIC_PORT=8443
+    NEED_ORIGIN_RULE=1
+    warn "-> Caddy will use origin port ${PUBLIC_PORT}; add a Cloudflare Origin Rule (shown at the end)."
+    if [ -n "$(port_holder "$PUBLIC_PORT")" ] && [ "$(port_holder "$PUBLIC_PORT")" != "caddy" ]; then
+      die "fallback port ${PUBLIC_PORT} is also busy. Pass --port <443|8443|2053|2083|2087|2096>."
+    fi
+  else
+    warn "port ${PUBLIC_PORT} is held by '${holder}'. Caddy may fail to bind; continuing as you asked."
+  fi
+fi
+# If we're on a non-standard CF origin port, an Origin Rule is required.
+case "$PUBLIC_PORT" in 443) ;; *) NEED_ORIGIN_RULE=1 ;; esac
+
+# ---------------------------------------------------------------------------
+# IDs, cert, decoy
+# ---------------------------------------------------------------------------
 if [ -z "$UUID" ] && [ -f "$XRAY_CONF" ] && jq -e . "$XRAY_CONF" >/dev/null 2>&1; then
   UUID="$(jq -r --arg t "$XRAY_TAG" '(.inbounds[]? | select(.tag==$t) | .settings.clients[0].id) // empty' "$XRAY_CONF" 2>/dev/null | head -1)"
 fi
@@ -155,19 +166,14 @@ fi
 mkdir -p "$CERT_DIR"
 if [ -n "$CERT" ]; then
   log "using provided Cloudflare Origin certificate"
-  install -m 644 "$CERT" "$CERT_DIR/origin.pem"
-  install -m 600 "$KEY"  "$CERT_DIR/origin.key"
+  install -m 644 "$CERT" "$CERT_DIR/origin.pem"; install -m 600 "$KEY" "$CERT_DIR/origin.key"
   CF_SSL_MODE="Full (strict)"
 elif [ -f "$CERT_DIR/origin.pem" ] && [ -f "$CERT_DIR/origin.key" ]; then
-  log "reusing existing origin certificate in $CERT_DIR"
-  CF_SSL_MODE="Full"
+  log "reusing existing origin certificate in $CERT_DIR"; CF_SSL_MODE="Full"
 else
   log "generating a self-signed origin certificate for $DOMAIN"
-  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-    -keyout "$CERT_DIR/origin.key" -out "$CERT_DIR/origin.pem" \
-    -subj "/CN=${DOMAIN}" >/dev/null 2>&1
-  chmod 600 "$CERT_DIR/origin.key"
-  CF_SSL_MODE="Full"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout "$CERT_DIR/origin.key" -out "$CERT_DIR/origin.pem" -subj "/CN=${DOMAIN}" >/dev/null 2>&1
+  chmod 600 "$CERT_DIR/origin.key"; CF_SSL_MODE="Full"
 fi
 
 mkdir -p "$DECOY_DIR"
@@ -179,31 +185,19 @@ mkdir -p "$DECOY_DIR"
 EOF
 
 # ---------------------------------------------------------------------------
-# Pick a free local port for the Xray WS inbound (avoid existing inbounds + listeners).
+# Free local port for the WS inbound
 # ---------------------------------------------------------------------------
-declare -a used_ports=()
+declare -a used_ports=(); existing_port=""
 if [ -f "$XRAY_CONF" ] && jq -e . "$XRAY_CONF" >/dev/null 2>&1; then
-  # Reuse our own inbound's port if it already exists.
   existing_port="$(jq -r --arg t "$XRAY_TAG" '(.inbounds[]? | select(.tag==$t) | .port) // empty' "$XRAY_CONF" | head -1)"
   mapfile -t used_ports < <(jq -r '.inbounds[]?.port // empty' "$XRAY_CONF" 2>/dev/null)
 fi
-port_in_use() {
-  local p="$1" u
-  for u in "${used_ports[@]:-}"; do [ "$u" = "$p" ] && return 0; done
-  ss -tlnH 2>/dev/null | grep -qE "127\.0\.0\.1:$p |0\.0\.0\.0:$p |\[::\]:$p " && return 0
-  return 1
-}
-if [ -n "${existing_port:-}" ]; then
-  XRAY_LOCAL_PORT="$existing_port"
-  log "reusing existing $XRAY_TAG local port $XRAY_LOCAL_PORT"
-else
-  XRAY_LOCAL_PORT=8080
-  while port_in_use "$XRAY_LOCAL_PORT"; do XRAY_LOCAL_PORT=$((XRAY_LOCAL_PORT+1)); done
-  log "using local port $XRAY_LOCAL_PORT for the WS inbound"
-fi
+port_in_use() { local p="$1" u; for u in "${used_ports[@]:-}"; do [ "$u" = "$p" ] && return 0; done; ss -tlnH 2>/dev/null | grep -qE "127\.0\.0\.1:$p |0\.0\.0\.0:$p |\[::\]:$p " && return 0; return 1; }
+if [ -n "$existing_port" ]; then XRAY_LOCAL_PORT="$existing_port"; log "reusing existing $XRAY_TAG local port $XRAY_LOCAL_PORT"
+else XRAY_LOCAL_PORT=8080; while port_in_use "$XRAY_LOCAL_PORT"; do XRAY_LOCAL_PORT=$((XRAY_LOCAL_PORT+1)); done; log "using local port $XRAY_LOCAL_PORT for the WS inbound"; fi
 
 # ---------------------------------------------------------------------------
-# Xray config: MERGE our inbound, never clobber.
+# Xray config: MERGE, validate
 # ---------------------------------------------------------------------------
 our_inbound="$(jq -n --arg id "$UUID" --arg path "$WSPATH" --argjson port "$XRAY_LOCAL_PORT" --arg tag "$XRAY_TAG" '
   { listen:"127.0.0.1", port:$port, protocol:"vless", tag:$tag,
@@ -211,20 +205,16 @@ our_inbound="$(jq -n --arg id "$UUID" --arg path "$WSPATH" --argjson port "$XRAY
     streamSettings:{ network:"ws", wsSettings:{ path:$path } } }')"
 
 if [ -f "$XRAY_CONF" ] && jq -e . "$XRAY_CONF" >/dev/null 2>&1; then
-  log "merging WS inbound into existing Xray config"
-  backup "$XRAY_CONF"
-  tmp="$(mktemp)"
+  log "merging WS inbound into existing Xray config"; backup "$XRAY_CONF"; tmp="$(mktemp)"
   jq --argjson inb "$our_inbound" --arg t "$XRAY_TAG" '
     .inbounds = ((.inbounds // []) | map(select(.tag != $t)) + [$inb])
     | (if ((.outbounds // []) | length) == 0 then .outbounds = [{protocol:"freedom",tag:"direct"}] else . end)
   ' "$XRAY_CONF" > "$tmp" && mv "$tmp" "$XRAY_CONF"
 else
-  log "no existing Xray config — writing a fresh one"
-  mkdir -p "$(dirname "$XRAY_CONF")"
+  log "no existing Xray config — writing a fresh one"; mkdir -p "$(dirname "$XRAY_CONF")"
   jq -n --argjson inb "$our_inbound" '{log:{loglevel:"warning"},inbounds:[$inb],outbounds:[{protocol:"freedom",tag:"direct"}]}' > "$XRAY_CONF"
 fi
 
-# Validate Xray before touching the running service.
 if ! xray -test -config "$XRAY_CONF" >/tmp/cfvpn-xray-test.log 2>&1; then
   warn "Xray config test FAILED — restoring backup and aborting:"; cat /tmp/cfvpn-xray-test.log >&2
   [ -f "$XRAY_CONF.bak.$STAMP" ] && cp -a "$XRAY_CONF.bak.$STAMP" "$XRAY_CONF"
@@ -232,11 +222,59 @@ if ! xray -test -config "$XRAY_CONF" >/tmp/cfvpn-xray-test.log 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Caddy config: separate snippet + import, never clobber the main Caddyfile.
+# Ensure Caddy has a systemd service (bare-binary installs don't)
+# ---------------------------------------------------------------------------
+ensure_caddy_service() {
+  if systemctl list-unit-files 2>/dev/null | grep -q '^caddy\.service' \
+     || [ -f /lib/systemd/system/caddy.service ] || [ -f /etc/systemd/system/caddy.service ]; then
+    return 0
+  fi
+  local bin; bin="$(command -v caddy)"
+  log "Caddy has no systemd service — creating one for $bin"
+  if ! id caddy >/dev/null 2>&1; then
+    groupadd --system caddy 2>/dev/null || true
+    useradd --system --gid caddy --home-dir /var/lib/caddy --create-home --shell /usr/sbin/nologin caddy 2>/dev/null || true
+  fi
+  mkdir -p /var/lib/caddy; chown -R caddy:caddy /var/lib/caddy 2>/dev/null || true
+  cat >/etc/systemd/system/caddy.service <<UNIT
+[Unit]
+Description=Caddy
+Documentation=https://caddyserver.com/docs/
+After=network.target network-online.target
+Requires=network-online.target
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+ExecStart=${bin} run --environ --config ${CADDY_MAIN}
+ExecReload=${bin} reload --config ${CADDY_MAIN} --force
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+}
+ensure_caddy_service
+
+# Make cert + decoy readable by the caddy user (if it runs unprivileged).
+if id caddy >/dev/null 2>&1; then
+  chown root:caddy "$CERT_DIR/origin.key" "$CERT_DIR/origin.pem" 2>/dev/null || true
+  chmod 750 "$CERT_DIR" 2>/dev/null || true
+  chmod 640 "$CERT_DIR/origin.key" 2>/dev/null || true
+  chmod 644 "$CERT_DIR/origin.pem" 2>/dev/null || true
+  chmod -R a+rX "$DECOY_DIR" 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
+# Caddy config: separate snippet + import, validate
 # ---------------------------------------------------------------------------
 mkdir -p "$CADDY_SNIPPET_DIR"
-# Using the https:// scheme prefix disables the automatic :80 redirect for this
-# site, so we don't need a global options block (which would clash with yours).
 cat >"$CADDY_SNIPPET" <<EOF
 https://${DOMAIN}:${PUBLIC_PORT} {
 	tls ${CERT_DIR}/origin.pem ${CERT_DIR}/origin.key
@@ -248,45 +286,29 @@ https://${DOMAIN}:${PUBLIC_PORT} {
 	file_server
 }
 EOF
-log "wrote Caddy snippet $CADDY_SNIPPET"
+log "wrote Caddy snippet $CADDY_SNIPPET (origin port ${PUBLIC_PORT})"
 
 if [ -f "$CADDY_MAIN" ]; then
   if ! grep -qE '^\s*import\s+conf\.d/\*\.caddy' "$CADDY_MAIN"; then
-    backup "$CADDY_MAIN"
-    printf '\nimport conf.d/*.caddy\n' >> "$CADDY_MAIN"
-    log "added 'import conf.d/*.caddy' to $CADDY_MAIN"
-  else
-    log "$CADDY_MAIN already imports conf.d — left unchanged"
-  fi
+    backup "$CADDY_MAIN"; printf '\nimport conf.d/*.caddy\n' >> "$CADDY_MAIN"; log "added import to $CADDY_MAIN"
+  else log "$CADDY_MAIN already imports conf.d — unchanged"; fi
 else
-  printf 'import conf.d/*.caddy\n' > "$CADDY_MAIN"
-  log "created minimal $CADDY_MAIN with conf.d import"
+  printf 'import conf.d/*.caddy\n' > "$CADDY_MAIN"; log "created minimal $CADDY_MAIN"
 fi
 
-# Validate Caddy before reloading.
 if ! caddy validate --config "$CADDY_MAIN" --adapter caddyfile >/tmp/cfvpn-caddy-test.log 2>&1; then
   warn "Caddy config test FAILED — reverting our changes and aborting:"; cat /tmp/cfvpn-caddy-test.log >&2
-  rm -f "$CADDY_SNIPPET"
-  [ -f "$CADDY_MAIN.bak.$STAMP" ] && cp -a "$CADDY_MAIN.bak.$STAMP" "$CADDY_MAIN"
+  rm -f "$CADDY_SNIPPET"; [ -f "$CADDY_MAIN.bak.$STAMP" ] && cp -a "$CADDY_MAIN.bak.$STAMP" "$CADDY_MAIN"
   die "no changes applied to the running Caddy."
 fi
 
 # ---------------------------------------------------------------------------
-# Port 443 conflict check (warn, don't clobber).
+# Firewall + start
 # ---------------------------------------------------------------------------
-holder="$(ss -tlnpH 2>/dev/null | awk -v p=":${PUBLIC_PORT}" '$4 ~ p"$" {print $0}' | grep -oE 'users:\(\("[^"]+' | grep -oE '[^"]+$' | head -1 || true)"
-if [ -n "$holder" ] && [ "$holder" != "caddy" ]; then
-  warn "port ${PUBLIC_PORT} is currently held by '$holder', not Caddy."
-  warn "Caddy needs ${PUBLIC_PORT}. If '$holder' is another proxy (e.g. Reality on 443),"
-  warn "either move it, use --port, or run this CDN setup on a separate VPS."
-fi
+if command -v ufw >/dev/null 2>&1; then ufw allow "${PUBLIC_PORT}"/tcp >/dev/null 2>&1 || true; fi
 
-# ---------------------------------------------------------------------------
-# Start / reload services.
-# ---------------------------------------------------------------------------
-log "restarting Xray and reloading Caddy…"
-systemctl enable xray >/dev/null 2>&1 || true
-systemctl restart xray
+log "restarting Xray and (re)starting Caddy…"
+systemctl enable xray >/dev/null 2>&1 || true; systemctl restart xray
 systemctl enable caddy >/dev/null 2>&1 || true
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
@@ -295,7 +317,7 @@ systemctl is-active --quiet xray  || warn "xray is not active — check: journal
 systemctl is-active --quiet caddy || warn "caddy is not active — check: journalctl -u caddy -e"
 
 # ---------------------------------------------------------------------------
-# Client link + QR.
+# Output
 # ---------------------------------------------------------------------------
 enc_path="$(printf '%s' "$WSPATH" | sed 's,/,%2F,g')"
 LINK="vless://${UUID}@${DOMAIN}:443?encryption=none&security=tls&sni=${DOMAIN}&fp=chrome&type=ws&host=${DOMAIN}&path=${enc_path}#${NAME}"
@@ -303,13 +325,19 @@ PUBIP="$(curl -fsS https://api.ipify.org 2>/dev/null || echo THIS_VPS_IP)"
 
 echo
 echo "==================================================================="
-echo " Cloudflare-fronted VLESS+WS VPN is ready (existing setup preserved)."
+echo " Cloudflare-fronted VLESS+WS VPN is ready (Reality/panel preserved)."
 echo "==================================================================="
 echo
-echo " Finish in the Cloudflare dashboard:"
+echo " Cloudflare dashboard steps:"
 echo "   1) DNS: A record  ${DOMAIN}  ->  ${PUBIP}   [ PROXIED / orange cloud ]"
 echo "   2) SSL/TLS mode:  ${CF_SSL_MODE}"
 echo "   3) WebSockets:    ON (default)"
+if [ "$NEED_ORIGIN_RULE" -eq 1 ]; then
+echo "   4) Origin Rule (REQUIRED — origin port is ${PUBLIC_PORT}, not 443):"
+echo "        Rules -> Origin Rules -> Create rule"
+echo "        If hostname equals ${DOMAIN}  ->  Rewrite to  Port = ${PUBLIC_PORT}"
+echo "      (Visitors still use 443; Cloudflare dials your origin on ${PUBLIC_PORT}.)"
+fi
 echo
 echo " Client:  Host/SNI ${DOMAIN} · Port 443 · ws · path ${WSPATH}"
 echo "          UUID ${UUID}"
@@ -320,7 +348,7 @@ echo "   ${LINK}"
 echo
 if command -v qrencode >/dev/null 2>&1; then echo " Or scan:"; qrencode -t ANSIUTF8 "$LINK"; fi
 echo
-echo " Backups (if any) end in .bak.${STAMP}.  Undo everything with: sudo $0 --uninstall"
-echo " Reality does NOT work behind Cloudflare — this is WS+TLS on purpose."
-echo " Run it as a SECONDARY next to a direct Reality server."
+echo " Undo everything with:  sudo $0 --domain ${DOMAIN} --uninstall"
+echo " Note: this uses a dedicated Xray on 127.0.0.1:${XRAY_LOCAL_PORT}, separate"
+echo " from your panel's Xray — your Reality on 443 is untouched."
 echo "==================================================================="

@@ -100,8 +100,9 @@ fi
 [ -n "$NAME" ] || NAME="CF-${DOMAIN}"
 if [ -n "$CERT" ] && [ -z "$KEY" ]; then die "--cert given without --key"; fi
 if [ -n "$KEY" ] && [ -z "$CERT" ]; then die "--key given without --cert"; fi
-if [ -z "$WSPATH" ]; then WSPATH="/$(openssl rand -hex 6 2>/dev/null || head -c6 /dev/urandom | xxd -p)"; fi
-case "$WSPATH" in /*) ;; *) WSPATH="/$WSPATH" ;; esac
+# Normalize an explicitly-given path now; otherwise it's resolved below (reuse
+# the existing one from the config, or generate a new one) so re-runs are stable.
+[ -n "$WSPATH" ] && case "$WSPATH" in /*) ;; *) WSPATH="/$WSPATH" ;; esac
 
 # ---------------------------------------------------------------------------
 # Dependencies (only what's missing)
@@ -169,10 +170,15 @@ case "$PUBLIC_PORT" in 443) ;; *) NEED_ORIGIN_RULE=1 ;; esac
 # ---------------------------------------------------------------------------
 # IDs, cert, decoy
 # ---------------------------------------------------------------------------
-if [ -z "$UUID" ] && [ -f "$XRAY_CONF" ] && jq -e . "$XRAY_CONF" >/dev/null 2>&1; then
-  UUID="$(jq -r --arg t "$XRAY_TAG" '(.inbounds[]? | select(.tag==$t) | .settings.clients[0].id) // empty' "$XRAY_CONF" 2>/dev/null | head -1)"
+if [ -f "$XRAY_CONF" ] && jq -e . "$XRAY_CONF" >/dev/null 2>&1; then
+  # Reuse the existing UUID and WS path so re-runs don't churn the client config.
+  [ -z "$UUID" ] && UUID="$(jq -r --arg t "$XRAY_TAG" '(.inbounds[]? | select(.tag==$t) | .settings.clients[0].id) // empty' "$XRAY_CONF" 2>/dev/null | head -1)"
+  [ -z "$WSPATH" ] && WSPATH="$(jq -r --arg t "$XRAY_TAG" '(.inbounds[]? | select(.tag==$t) | .streamSettings.wsSettings.path) // empty' "$XRAY_CONF" 2>/dev/null | head -1)"
 fi
 [ -n "$UUID" ] || UUID="$(xray uuid 2>/dev/null || cat /proc/sys/kernel/random/uuid)"
+# Only generate a fresh path if none was given and none exists in the config.
+[ -n "$WSPATH" ] || WSPATH="/$(openssl rand -hex 6 2>/dev/null || head -c6 /dev/urandom | xxd -p)"
+case "$WSPATH" in /*) ;; *) WSPATH="/$WSPATH" ;; esac
 
 mkdir -p "$CERT_DIR"
 if [ -n "$CERT" ]; then

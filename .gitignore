@@ -2,7 +2,11 @@
 *.local.json
 *.local.yaml
 *.local.yml
+*.local.env
 config.local.*
+client.local.env
+subscription.local.txt
+qr/
 secrets*
 *.key
 *.pem
@@ -10,3 +14,5 @@ secrets*
 # Editor / OS noise
 .DS_Store
 *.swp
+__pycache__/
+*.pyc

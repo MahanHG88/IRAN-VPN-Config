@@ -51,6 +51,7 @@ If you only read one thing, read this:
 | [05 — Protocol diversity](docs/05-protocol-diversity.md) | Hysteria2, TUIC, Shadowsocks-2022 + shadow-tls, and when to use each |
 | [06 — Resilience playbook](docs/06-resilience-playbook.md) | Multi-server failover, IP rotation, port hopping, avoiding domain churn, client managers |
 | [07 — ICMP / DNS tunneling fallbacks](docs/07-icmp-dns-tunneling.md) | Break-glass transports for when almost nothing gets through |
+| [08 — Apps with an On/Off toggle](docs/08-apps-and-toggle.md) | Hiddify on Mac + Android (one-tap), generating import links/QR, and ICMP's limits |
 
 ## Example configs
 
@@ -60,6 +61,18 @@ passwords, and SNIs with your own. **Never commit real secrets.**
 - `configs/reality/` — Xray VLESS + Reality server & client
 - `configs/vless-ws-cdn/` — VLESS + WebSocket + TLS behind Cloudflare (Xray + Caddy)
 - `configs/hysteria2/` — Hysteria2 (QUIC) server & client
+
+## Scripts
+
+- [`scripts/make-client-links.sh`](scripts/make-client-links.sh) — turn your
+  server details ([`configs/client.env.example`](configs/client.env.example))
+  into one-tap **share links + QR codes** for Hiddify (see
+  [docs/08](docs/08-apps-and-toggle.md)). This is how you get an On/Off app on
+  Mac + Android.
+- [`scripts/icmp-tunnel.sh`](scripts/icmp-tunnel.sh) — set up the last-resort
+  ICMP tunnel (Linux; see [docs/07](docs/07-icmp-dns-tunneling.md)).
+- [`scripts/icmp-tunnel-app.py`](scripts/icmp-tunnel-app.py) — a local web
+  On/Off panel for the ICMP tunnel (Linux only).
 
 ## Your specific domains
 

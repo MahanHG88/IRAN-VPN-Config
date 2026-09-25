@@ -9,6 +9,26 @@ Treat this as a **secondary** transport. It is TLS-in-TLS, which Iran's DPI can
 sometimes detect ([01 §4](01-how-iran-filtering-works.md)), and Cloudflare-fronted
 proxies get disrupted during hard crackdowns. Still very useful in the rotation.
 
+## One-paste setup script
+
+[`scripts/setup-cloudflare-vpn.sh`](../scripts/setup-cloudflare-vpn.sh) builds
+this entire setup on a Debian/Ubuntu VPS in one run — installs Xray + Caddy,
+generates the UUID + secret path, creates the origin cert, serves a decoy site,
+wires the secret WS path to Xray, opens the firewall, and prints the client
+link + QR:
+
+```bash
+sudo ./scripts/setup-cloudflare-vpn.sh --domain mooooz.lol
+# or, with a Cloudflare Origin Certificate (then use SSL mode "Full (strict)"):
+sudo ./scripts/setup-cloudflare-vpn.sh --domain mooooz.lol --cert origin.pem --key origin.key
+```
+
+By default it makes a **self-signed origin cert** (use Cloudflare SSL mode
+**Full**) so you don't have to touch the cert dashboard. Afterwards, in
+Cloudflare: point the **orange-cloud** A record at the VPS, set the SSL mode it
+tells you, and import the printed link into Hiddify. The manual steps below
+explain what the script automates.
+
 ## Architecture
 
 ```

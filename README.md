@@ -76,6 +76,10 @@ passwords, and SNIs with your own. **Never commit real secrets.**
   into one-tap **share links + QR codes** for Hiddify (see
   [docs/08](docs/08-apps-and-toggle.md)). This is how you get an On/Off app on
   Mac + Android.
+- [`scripts/setup-cloudflare-vpn.sh`](scripts/setup-cloudflare-vpn.sh) —
+  one-paste server setup for the **Cloudflare-fronted VLESS+WS+TLS** VPN
+  (installs Xray + Caddy, makes the cert, prints the client link/QR; see
+  [docs/04](docs/04-cdn-fronting-vless-ws.md)).
 - [`scripts/icmp-tunnel.sh`](scripts/icmp-tunnel.sh) — set up the last-resort
   ICMP tunnel (Linux; see [docs/07](docs/07-icmp-dns-tunneling.md)).
 - [`scripts/icmp-tunnel-app.py`](scripts/icmp-tunnel-app.py) — a local web

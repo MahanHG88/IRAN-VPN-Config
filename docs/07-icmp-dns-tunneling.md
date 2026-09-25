@@ -12,6 +12,26 @@ most foreign TCP/UDP, but leaves **ICMP (ping)** or **DNS** partially working
 because breaking them breaks basic connectivity. If you can `ping` out or resolve
 DNS to an external resolver, you can sometimes smuggle a slow tunnel through.
 
+## Ready-to-run script
+
+This repo ships [`scripts/icmp-tunnel.sh`](../scripts/icmp-tunnel.sh), which
+sets up a full IP-over-ICMP tunnel with `hans` on both ends:
+
+```bash
+# On your VPS (public IP):
+sudo ./scripts/icmp-tunnel.sh server --password 'YOURPASS'
+sudo ./scripts/icmp-tunnel.sh server --password 'YOURPASS' --systemd   # persistent
+
+# On the machine in Iran:
+sudo ./scripts/icmp-tunnel.sh client --server <VPS_PUBLIC_IP> --password 'YOURPASS'
+sudo ./scripts/icmp-tunnel.sh client --server <VPS_PUBLIC_IP> --password 'YOURPASS' --full-tunnel
+```
+
+It installs `hans`, enables IP forwarding + NAT on the server, and (with
+`--full-tunnel`) routes all client traffic through the tunnel while keeping a
+host route to the server via the real gateway so you don't cut your own link.
+Ctrl-C on the client restores routing and DNS. Details below.
+
 ## ICMP tunneling
 
 Encapsulates IP traffic inside ICMP echo request/reply payloads. Tools:

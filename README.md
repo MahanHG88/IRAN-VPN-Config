@@ -62,6 +62,13 @@ passwords, and SNIs with your own. **Never commit real secrets.**
 - `configs/vless-ws-cdn/` — VLESS + WebSocket + TLS behind Cloudflare (Xray + Caddy)
 - `configs/hysteria2/` — Hysteria2 (QUIC) server & client
 
+## Web UI
+
+- [`web/index.html`](web/index.html) — the "Sentinel" dashboard design (dark/light,
+  responsive, self-contained). Currently a **UI mockup with simulated data** — see
+  [`web/README.md`](web/README.md) for what it is and how to make it functional
+  (the natural next step is a client-side config-link generator).
+
 ## Scripts
 
 - [`scripts/make-client-links.sh`](scripts/make-client-links.sh) — turn your

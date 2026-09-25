@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sentinel VPN</title>
+<meta name="description" content="Sentinel — VPN connection dashboard UI (design mockup).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b1120;
+    --bg-grad: radial-gradient(1200px 600px at 82% -10%, #16233d 0%, rgba(11,17,32,0) 60%), #0b1120;
+    --surface: #131c2e;
+    --surface-2: #1a2436;
+    --surface-hi: #212d43;
+    --line: #263248;
+    --line-soft: #1d2739;
+    --text: #eaf0fb;
+    --text-dim: #9fb0cc;
+    --text-mute: #6b7a96;
+    --accent: #2dd4bf;
+    --accent-dim: #1c8f81;
+    --accent-glow: rgba(45,212,191,.16);
+    --good: #34d399;
+    --warn: #fbbf24;
+    --crit: #f87171;
+    --shadow: 0 18px 40px -20px rgba(0,0,0,.7);
+    --radius: 16px;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #eef1f6;
+    --bg-grad: radial-gradient(1100px 560px at 84% -14%, #dbe6f2 0%, rgba(238,241,246,0) 62%), #eef1f6;
+    --surface: #ffffff;
+    --surface-2: #f4f6fb;
+    --surface-hi: #e9eef7;
+    --line: #dbe1ec;
+    --line-soft: #e6ebf3;
+    --text: #10192b;
+    --text-dim: #4a5a76;
+    --text-mute: #7c8aa4;
+    --accent: #0d9488;
+    --accent-dim: #0f766e;
+    --accent-glow: rgba(13,148,136,.12);
+    --good: #059669;
+    --warn: #b45309;
+    --crit: #dc2626;
+    --shadow: 0 16px 34px -22px rgba(20,40,80,.35);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: #eef1f6;
+      --bg-grad: radial-gradient(1100px 560px at 84% -14%, #dbe6f2 0%, rgba(238,241,246,0) 62%), #eef1f6;
+      --surface: #ffffff;
+      --surface-2: #f4f6fb;
+      --surface-hi: #e9eef7;
+      --line: #dbe1ec;
+      --line-soft: #e6ebf3;
+      --text: #10192b;
+      --text-dim: #4a5a76;
+      --text-mute: #7c8aa4;
+      --accent: #0d9488;
+      --accent-dim: #0f766e;
+      --accent-glow: rgba(13,148,136,.12);
+      --good: #059669;
+      --warn: #b45309;
+      --crit: #dc2626;
+      --shadow: 0 16px 34px -22px rgba(20,40,80,.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg-grad);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  h1, h2, h3 { font-family: "Sora", system-ui, sans-serif; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-mute); font-weight: 600; }
+  a { color: inherit; }
+  button { font-family: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+  /* ---- shell ---- */
+  .shell {
+    display: grid;
+    grid-template-columns: 248px 1fr;
+    min-height: 100%;
+  }
+  .rail {
+    border-right: 1px solid var(--line-soft);
+    padding: 22px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    height: 100vh;
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
+    backdrop-filter: blur(6px);
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 2px 6px; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    display: grid; place-items: center;
+    background: linear-gradient(150deg, var(--accent), var(--accent-dim));
+    box-shadow: 0 6px 16px -6px var(--accent);
+  }
+  .brand-mark svg { width: 19px; height: 19px; }
+  .brand-name { font-family: "Sora", sans-serif; font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
+  .brand-sub { font-size: 11px; color: var(--text-mute); letter-spacing: .04em; }
+
+  .nav { display: flex; flex-direction: column; gap: 3px; }
+  .nav-label { padding: 0 8px 6px; }
+  .nav a {
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 11px; border-radius: 10px;
+    color: var(--text-dim); text-decoration: none; font-size: 14px; font-weight: 500;
+    transition: background .15s, color .15s;
+  }
+  .nav a svg { width: 17px; height: 17px; opacity: .85; }
+  .nav a:hover { background: var(--surface-2); color: var(--text); }
+  .nav a.active { background: var(--accent-glow); color: var(--accent); }
+  .nav a.active svg { opacity: 1; }
+
+  .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+  .quota {
+    background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 13px;
+  }
+  .quota .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--text-dim); }
+  .bar { height: 6px; border-radius: 4px; background: var(--surface-hi); overflow: hidden; margin-top: 9px; }
+  .bar > i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-dim)); }
+  .user { display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; flex: none; background: linear-gradient(135deg,#4f6bff,#a855f7); display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 13px; }
+
+  /* ---- main ---- */
+  .main { padding: 22px clamp(16px, 3vw, 34px) 40px; min-width: 0; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  .topbar h1 { font-size: clamp(20px, 2.6vw, 26px); font-weight: 700; }
+  .topbar p { margin: 3px 0 0; color: var(--text-mute); font-size: 13px; }
+  .top-actions { display: flex; align-items: center; gap: 8px; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--text-dim); display: grid; place-items: center;
+    transition: background .15s, color .15s;
+  }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  .grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; align-items: start; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .card-h { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 0; }
+  .card-h h3 { font-size: 14px; font-weight: 600; }
+
+  /* connection hero */
+  .hero { padding: 20px 22px 22px; position: relative; overflow: hidden; }
+  .hero::after {
+    content:""; position:absolute; inset:auto -30% -60% auto; width: 320px; height: 320px; border-radius: 50%;
+    background: radial-gradient(circle, var(--accent-glow), transparent 70%); pointer-events:none;
+  }
+  .status-line { display: flex; align-items: center; gap: 10px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
+    padding: 5px 11px; border-radius: 999px; letter-spacing: .01em;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .pill.on { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .pill.on .dot { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 22%, transparent); }
+  .pill.busy { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+  .pill.busy .dot { background: var(--warn); animation: pulse 1s infinite; }
+  .pill.off { background: var(--surface-hi); color: var(--text-mute); }
+  .pill.off .dot { background: var(--text-mute); }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  .hero-main { display: flex; align-items: center; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
+  .power {
+    --sz: 118px; width: var(--sz); height: var(--sz); border-radius: 50%; flex: none; position: relative;
+    border: none; background: none; display: grid; place-items: center;
+  }
+  .power .ring { position: absolute; inset: 0; }
+  .power .glyph { width: 40px; height: 40px; color: var(--text); z-index: 1; transition: color .2s; }
+  .power.on .glyph { color: var(--accent); }
+  .power:hover .glyph { transform: scale(1.05); }
+  .power .glyph { transition: transform .15s, color .2s; }
+
+  .hero-info { flex: 1; min-width: 200px; }
+  .hero-loc { display: flex; align-items: center; gap: 10px; }
+  .flag { font-size: 26px; line-height: 1; }
+  .hero-loc h2 { font-size: 20px; font-weight: 600; }
+  .hero-info .sub { color: var(--text-mute); font-size: 13px; margin-top: 2px; }
+  .hero-meta { display: flex; gap: 26px; margin-top: 16px; flex-wrap: wrap; }
+  .hero-meta .k { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-mute); }
+  .hero-meta .v { font-size: 15px; font-weight: 500; margin-top: 3px; }
+  .hero-meta .v.accent { color: var(--accent); }
+
+  .protocols { display: flex; gap: 6px; margin-top: 18px; flex-wrap: wrap; }
+  .chip {
+    font-size: 11px; padding: 4px 9px; border-radius: 7px; border: 1px solid var(--line);
+    color: var(--text-dim); background: var(--surface-2); font-weight: 500;
+  }
+  .chip.sel { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+
+  /* kpi tiles */
+  .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 13px; padding: 15px 16px; }
+  .kpi .top { display: flex; align-items: center; justify-content: space-between; }
+  .kpi .lbl { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+  .kpi .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); color: var(--accent); }
+  .kpi .ic svg { width: 15px; height: 15px; }
+  .kpi .val { font-size: 26px; font-weight: 600; margin-top: 12px; letter-spacing: -.02em; }
+  .kpi .val .u { font-size: 13px; color: var(--text-mute); font-weight: 500; margin-left: 3px; }
+  .kpi .delta { font-size: 12px; margin-top: 3px; color: var(--text-mute); }
+  .kpi .delta b { color: var(--good); font-weight: 600; }
+
+  /* chart */
+  .chart-wrap { padding: 6px 10px 14px; }
+  canvas { display: block; width: 100%; height: 168px; }
+  .legend { display: flex; gap: 16px; padding: 0 18px 14px; font-size: 12px; color: var(--text-dim); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
+  /* servers */
+  .servers { padding: 6px 8px 10px; }
+  .srv {
+    display: grid; grid-template-columns: 30px 1fr auto auto; gap: 12px; align-items: center;
+    padding: 11px 12px; border-radius: 11px; cursor: pointer; border: 1px solid transparent;
+    transition: background .13s, border-color .13s;
+  }
+  .srv:hover { background: var(--surface-2); }
+  .srv.active { background: var(--accent-glow); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  .srv .fl { font-size: 22px; }
+  .srv .name { font-size: 14px; font-weight: 500; }
+  .srv .city { font-size: 12px; color: var(--text-mute); }
+  .srv .ping { font-size: 13px; text-align: right; }
+  .srv .ping b { font-weight: 600; }
+  .srv .load { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; width: 62px; }
+  .srv .load .barmini { width: 100%; height: 5px; border-radius: 3px; background: var(--surface-hi); overflow: hidden; }
+  .srv .load .barmini > i { display: block; height: 100%; border-radius: 3px; }
+  .srv .load small { font-size: 10px; color: var(--text-mute); letter-spacing: .04em; }
+  .dot-good { color: var(--good); } .fill-good { background: var(--good); }
+  .dot-warn { color: var(--warn); } .fill-warn { background: var(--warn); }
+  .dot-crit { color: var(--crit); } .fill-crit { background: var(--crit); }
+
+  /* toggles panel */
+  .rows { padding: 6px 6px 10px; }
+  .trow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border-radius: 11px; }
+  .trow:hover { background: var(--surface-2); }
+  .trow .t { font-size: 14px; font-weight: 500; }
+  .trow .d { font-size: 12px; color: var(--text-mute); margin-top: 1px; }
+  .switch { --w: 42px; width: var(--w); height: 24px; border-radius: 999px; border: none; background: var(--surface-hi); position: relative; flex: none; transition: background .18s; }
+  .switch::after { content:""; position:absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--text-mute); transition: transform .18s, background .18s; }
+  .switch[aria-checked="true"] { background: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(18px); background: #fff; }
+
+  .section-title { margin: 26px 0 12px; }
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 9px;
+    padding: 6px 12px; font-size: 12px; font-weight: 500;
+  }
+  .btn:hover { background: var(--surface-2); }
+
+  .mobile-brand { display: none; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .rail { display: none; }
+    .grid { grid-template-columns: 1fr; }
+    .mobile-brand { display: flex; }
+  }
+  @media (max-width: 560px) {
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .hero-meta { gap: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ============ NAV RAIL ============ -->
+  <aside class="rail">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l7 3v6c0 4.4-3 8.3-7 9.5C8 19.3 5 15.4 5 11V5l7-3z" fill="#04231f"/><path d="M9.2 11.6l2 2 3.6-4" stroke="#7ff0e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div>
+        <div class="brand-name">Sentinel</div>
+        <div class="brand-sub mono">v3.2 · secure</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-label eyebrow">Workspace</div>
+      <a href="#dashboard" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Dashboard
+      </a>
+      <a href="#servers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><circle cx="7" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1" fill="currentColor" stroke="none"/></svg>
+        Servers
+      </a>
+      <a href="#activity">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg>
+        Activity
+      </a>
+      <a href="#settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M4.5 4.5l1.8 1.8M17.7 17.7l1.8 1.8M3 12h2.5M18.5 12H21M4.5 19.5l1.8-1.8M17.7 6.3l1.8-1.8"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="rail-foot">
+      <div class="quota">
+        <div class="row"><span>Data this month</span><span class="mono" id="quotaTxt">128.4 / 500 GB</span></div>
+        <div class="bar"><i style="width:26%"></i></div>
+        <div class="row" style="margin-top:8px;color:var(--text-mute)"><span class="mono">Resets in 12 days</span><span>Unlimited plan</span></div>
+      </div>
+      <div class="user">
+        <span class="avatar">M</span>
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mahan</div>
+          <div style="font-size:11px;color:var(--text-mute)">Pro · 4 devices</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <header class="topbar">
+      <div class="mobile-brand" style="align-items:center;gap:10px;">
+        <span class="brand-mark" style="width:30px;height:30px;border-radius:9px">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l7 3v6c0 4.4-3 8.3-7 9.5C8 19.3 5 15.4 5 11V5l7-3z" fill="#04231f"/><path d="M9.2 11.6l2 2 3.6-4" stroke="#7ff0e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </div>
+      <div>
+        <h1>Connection overview</h1>
+        <p>Your tunnel status, live throughput, and available exit nodes.</p>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
+          <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A8.5 8.5 0 1111.2 3 6.6 6.6 0 0021 12.8z"/></svg>
+        </button>
+        <button class="icon-btn" title="Notifications" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Connection hero -->
+      <section class="card hero" id="dashboard">
+        <div class="status-line">
+          <span class="pill on" id="statusPill"><span class="dot"></span><span id="statusTxt">Protected</span></span>
+          <span class="eyebrow" id="protoLine" style="letter-spacing:.06em">WireGuard · AES-256-GCM</span>
+        </div>
+
+        <div class="hero-main">
+          <button class="power on" id="powerBtn" aria-pressed="true" aria-label="Toggle connection">
+            <svg class="ring" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="54" fill="none" stroke="var(--surface-hi)" stroke-width="7"/>
+              <circle id="ringFg" cx="60" cy="60" r="54" fill="none" stroke="var(--accent)" stroke-width="7"
+                stroke-linecap="round" stroke-dasharray="339" stroke-dashoffset="0"
+                transform="rotate(-90 60 60)" style="transition:stroke-dashoffset .5s"/>
+            </svg>
+            <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.5 6.8a8 8 0 1011 0"/></svg>
+          </button>
+
+          <div class="hero-info">
+            <div class="hero-loc">
+              <span class="flag" id="curFlag">🇳🇱</span>
+              <h2 id="curName">Amsterdam · NL-04</h2>
+            </div>
+            <div class="sub mono" id="ipLine">Exit IP 185.42.116.9 · your ISP sees nothing</div>
+
+            <div class="hero-meta">
+              <div><div class="k">Uptime</div><div class="v mono" id="uptime">00:00:00</div></div>
+              <div><div class="k">Ping</div><div class="v accent mono" id="curPing">31 ms</div></div>
+              <div><div class="k">Session</div><div class="v mono" id="sessionData">2.7 GB</div></div>
+            </div>
+
+            <div class="protocols">
+              <button class="chip sel" data-proto="WireGuard · AES-256-GCM">WireGuard</button>
+              <button class="chip" data-proto="VLESS-Reality · XTLS-Vision">VLESS-Reality</button>
+              <button class="chip" data-proto="Trojan · TLS 1.3">Trojan</button>
+              <button class="chip" data-proto="Shadowsocks · 2022-blake3">Shadowsocks</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- KPI tiles -->
+      <section class="kpis">
+        <div class="kpi">
+          <div class="top">
+            <span class="lbl">Download</span>
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v12M7 11l5 5 5-5"/></svg></span>
+          </div>
+          <div class="val mono"><span id="dlVal">86.4</span><span class="u">Mbps</span></div>
+          <div class="delta">peak <b id="dlPeak">142 Mbps</b> today</div>
+        </div>
+        <div class="kpi">
+          <div class="top">
+            <span class="lbl">Upload</span>
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20V8M7 13l5-5 5 5"/></svg></span>
+          </div>
+          <div class="val mono"><span id="ulVal">24.1</span><span class="u">Mbps</span></div>
+          <div class="delta">peak <b id="ulPeak">39 Mbps</b> today</div>
+        </div>
+        <div class="kpi">
+          <div class="top">
+            <span class="lbl">Latency</span>
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="7"/><path d="M12 13l3-3M12 3h0"/></svg></span>
+          </div>
+          <div class="val mono"><span id="pingVal">31</span><span class="u">ms</span></div>
+          <div class="delta">jitter <b style="color:var(--text-dim)" id="jitter">2.4 ms</b></div>
+        </div>
+        <div class="kpi">
+          <div class="top">
+            <span class="lbl">Blocked</span>
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7 3v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          </div>
+          <div class="val mono"><span id="blkVal">1,284</span></div>
+          <div class="delta">trackers &amp; ads · <b>DNS shield on</b></div>
+        </div>
+      </section>
+
+      <!-- Throughput chart -->
+      <section class="card" id="activity" style="grid-column: 1 / -1;">
+        <div class="card-h">
+          <h3>Live throughput</h3>
+          <div style="display:flex;gap:6px">
+            <button class="btn" data-range="60">60s</button>
+            <button class="btn" data-range="300" style="border-color:var(--accent);color:var(--accent)">5m</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="chart" aria-label="Throughput over time"></canvas></div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i> Download</span>
+          <span><i style="background:#7c8aff"></i> Upload</span>
+          <span style="margin-left:auto;color:var(--text-mute)" class="mono">updated live</span>
+        </div>
+      </section>
+
+      <!-- Servers -->
+      <section class="card" id="servers">
+        <div class="card-h"><h3>Exit nodes</h3><span class="eyebrow">18 online</span></div>
+        <div class="servers" id="srvList"></div>
+      </section>
+
+      <!-- Settings / toggles -->
+      <section class="card" id="settings">
+        <div class="card-h"><h3>Protection</h3></div>
+        <div class="rows" id="toggleRows">
+          <div class="trow">
+            <div><div class="t">Kill switch</div><div class="d">Cut all traffic if the tunnel drops</div></div>
+            <button class="switch" role="switch" aria-checked="true" data-def="1"></button>
+          </div>
+          <div class="trow">
+            <div><div class="t">Auto-connect on launch</div><div class="d">Reconnect to the last node automatically</div></div>
+            <button class="switch" role="switch" aria-checked="true" data-def="1"></button>
+          </div>
+          <div class="trow">
+            <div><div class="t">DNS shield</div><div class="d">Block trackers, ads, and malware domains</div></div>
+            <button class="switch" role="switch" aria-checked="true" data-def="1"></button>
+          </div>
+          <div class="trow">
+            <div><div class="t">Obfuscation (Reality)</div><div class="d">Disguise traffic as ordinary TLS to bypass DPI</div></div>
+            <button class="switch" role="switch" aria-checked="false" data-def="0"></button>
+          </div>
+          <div class="trow">
+            <div><div class="t">LAN passthrough</div><div class="d">Allow local devices while connected</div></div>
+            <button class="switch" role="switch" aria-checked="false" data-def="0"></button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- theme ---------- */
+  var root = document.documentElement;
+  function sysDark(){ return !(window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches); }
+  function applyThemeIcon() {
+    var dark = root.getAttribute("data-theme") === "dark" || (!root.getAttribute("data-theme") && sysDark());
+    $("#themeIcon").innerHTML = dark
+      ? '<path d="M21 12.8A8.5 8.5 0 1111.2 3 6.6 6.6 0 0021 12.8z"/>'
+      : '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5V5M12 19v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12H5M19 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/>';
+  }
+  try { var st = localStorage.getItem("sentinel-theme"); if (st) root.setAttribute("data-theme", st); } catch (e) {}
+  applyThemeIcon();
+  $("#themeBtn").addEventListener("click", function () {
+    var cur = root.getAttribute("data-theme");
+    var next = cur === "dark" ? "light" : cur === "light" ? "dark" : (sysDark() ? "light" : "dark");
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("sentinel-theme", next); } catch (e) {}
+    applyThemeIcon();
+  });
+
+  /* ---------- state ---------- */
+  var servers = [
+    { flag:"🇳🇱", name:"NL-04", city:"Amsterdam",   ip:"185.42.116.9",  ping:31, load:22 },
+    { flag:"🇩🇪", name:"DE-11", city:"Frankfurt",   ip:"91.207.174.3",  ping:38, load:54 },
+    { flag:"🇫🇮", name:"FI-02", city:"Helsinki",    ip:"95.216.44.180", ping:44, load:18 },
+    { flag:"🇸🇪", name:"SE-07", city:"Stockholm",   ip:"45.83.220.16",  ping:49, load:71 },
+    { flag:"🇬🇧", name:"UK-09", city:"London",      ip:"51.89.12.244",  ping:57, load:63 },
+    { flag:"🇦🇪", name:"AE-01", city:"Dubai",       ip:"185.93.2.77",   ping:88, load:41 },
+    { flag:"🇺🇸", name:"US-22", city:"New York",    ip:"104.28.9.51",   ping:142, load:35 }
+  ];
+  var current = 0;
+  var connected = true;
+  var uptimeSec = 0, sessionMB = 2700;
+  var blocked = 1284;
+
+  function loadClass(l){ return l < 45 ? "good" : l < 70 ? "warn" : "crit"; }
+
+  /* ---------- servers render ---------- */
+  function renderServers() {
+    var html = servers.map(function (s, i) {
+      var lc = loadClass(s.load);
+      return '<div class="srv' + (i === current ? ' active' : '') + '" data-i="' + i + '" role="button" tabindex="0">' +
+        '<span class="fl">' + s.flag + '</span>' +
+        '<div><div class="name">' + s.name + '</div><div class="city">' + s.city + '</div></div>' +
+        '<div class="ping mono"><b>' + s.ping + '</b> ms</div>' +
+        '<div class="load"><div class="barmini"><i class="fill-' + lc + '" style="width:' + s.load + '%"></i></div>' +
+        '<small>' + s.load + '% load</small></div>' +
+        '</div>';
+    }).join("");
+    $("#srvList").innerHTML = html;
+    $$(".srv").forEach(function (el) {
+      el.addEventListener("click", function () { selectServer(+el.dataset.i); });
+      el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectServer(+el.dataset.i); } });
+    });
+  }
+
+  function selectServer(i) {
+    if (i === current && connected) return;
+    current = i;
+    renderServers();
+    connect(true);
+  }
+
+  /* ---------- connection flow ---------- */
+  var pill = $("#statusPill"), pTxt = $("#statusTxt"), power = $("#powerBtn"),
+      ring = $("#ringFg"), glyph = power.querySelector(".glyph");
+
+  function setPill(kind, txt) {
+    pill.className = "pill " + kind;
+    pTxt.textContent = txt;
+  }
+
+  function paintServer() {
+    var s = servers[current];
+    $("#curFlag").textContent = s.flag;
+    $("#curName").textContent = s.city + " · " + s.name;
+    $("#ipLine").textContent = connected
+      ? "Exit IP " + s.ip + " · your ISP sees nothing"
+      : "Not tunneled · your real IP is exposed";
+    $("#curPing").textContent = s.ping + " ms";
+    $("#pingVal").textContent = s.ping;
+    $("#jitter").textContent = (Math.random() * 3 + 1).toFixed(1) + " ms";
+  }
+
+  var connectTimer = null;
+  function connect(reconnect) {
+    clearTimeout(connectTimer);
+    setPill("busy", reconnect ? "Reconnecting…" : "Connecting…");
+    power.classList.remove("on");
+    ring.style.strokeDashoffset = "339";
+    connected = false;
+    paintServer();
+    connectTimer = setTimeout(function () {
+      connected = true;
+      power.classList.add("on");
+      power.setAttribute("aria-pressed", "true");
+      ring.style.strokeDashoffset = "0";
+      setPill("on", "Protected");
+      uptimeSec = 0;
+      paintServer();
+    }, reduce ? 200 : 1100);
+  }
+
+  function disconnect() {
+    clearTimeout(connectTimer);
+    connected = false;
+    power.classList.remove("on");
+    power.setAttribute("aria-pressed", "false");
+    ring.style.strokeDashoffset = "339";
+    setPill("off", "Unprotected");
+    paintServer();
+  }
+
+  power.addEventListener("click", function () {
+    if (connected) disconnect();
+    else connect(false);
+  });
+
+  /* ---------- protocol chips ---------- */
+  $$(".chip").forEach(function (c) {
+    c.addEventListener("click", function () {
+      $$(".chip").forEach(function (x) { x.classList.remove("sel"); });
+      c.classList.add("sel");
+      $("#protoLine").textContent = c.dataset.proto;
+      if (connected) connect(true);
+    });
+  });
+
+  /* ---------- toggles ---------- */
+  $$(".switch").forEach(function (sw) {
+    sw.addEventListener("click", function () {
+      var on = sw.getAttribute("aria-checked") === "true";
+      sw.setAttribute("aria-checked", String(!on));
+    });
+  });
+
+  /* ---------- uptime + counters ---------- */
+  function pad(n){ return (n < 10 ? "0" : "") + n; }
+  setInterval(function () {
+    if (!connected) return;
+    uptimeSec++;
+    var h = Math.floor(uptimeSec / 3600), m = Math.floor((uptimeSec % 3600) / 60), s = uptimeSec % 60;
+    $("#uptime").textContent = pad(h) + ":" + pad(m) + ":" + pad(s);
+    sessionMB += Math.random() * 6;
+    $("#sessionData").textContent = (sessionMB / 1000).toFixed(1) + " GB";
+    if (Math.random() < 0.4) { blocked += Math.floor(Math.random() * 3); $("#blkVal").textContent = blocked.toLocaleString(); }
+  }, 1000);
+
+  /* ---------- live throughput chart ---------- */
+  var canvas = $("#chart"), ctx = canvas.getContext("2d");
+  var N = 90, dl = [], ul = [], dpr = Math.min(window.devicePixelRatio || 1, 2);
+  for (var k = 0; k < N; k++) { dl.push(60 + Math.random() * 30); ul.push(18 + Math.random() * 8); }
+
+  function css(v){ return getComputedStyle(root).getPropertyValue(v).trim(); }
+  function sizeCanvas() {
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  sizeCanvas();
+  window.addEventListener("resize", sizeCanvas);
+
+  function series(arr, color, fill) {
+    var w = canvas.clientWidth, h = canvas.clientHeight, pad = 8, max = 160;
+    var step = (w) / (N - 1);
+    ctx.beginPath();
+    for (var i = 0; i < N; i++) {
+      var x = i * step, y = h - pad - (arr[i] / max) * (h - pad * 2);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    if (fill) {
+      var grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, fill); grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+      ctx.beginPath();
+      for (var j = 0; j < N; j++) { var xx = j * step, yy = h - pad - (arr[j] / max) * (h - pad * 2); j === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy); }
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
+    // endpoint dot
+    var ex = (N - 1) * step, ey = h - pad - (arr[N-1] / max) * (h - pad * 2);
+    ctx.beginPath(); ctx.arc(ex, ey, 3, 0, 7); ctx.fillStyle = color; ctx.fill();
+  }
+
+  function grid() {
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.strokeStyle = css("--line-soft"); ctx.lineWidth = 1;
+    for (var g = 1; g < 4; g++) { var y = (h / 4) * g; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  }
+
+  var acc = css("--accent") || "#2dd4bf";
+  function draw() {
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    grid();
+    acc = css("--accent");
+    series(ul, "#7c8aff", "rgba(124,138,255,.16)");
+    series(dl, acc, "rgba(45,212,191,.18)");
+  }
+
+  function tick() {
+    var base = connected ? 78 : 0, ubase = connected ? 22 : 0;
+    var nd = connected ? Math.max(4, base + (Math.random() - 0.5) * 46) : Math.random() * 2;
+    var nu = connected ? Math.max(2, ubase + (Math.random() - 0.5) * 16) : Math.random() * 1;
+    dl.push(nd); dl.shift(); ul.push(nu); ul.shift();
+    $("#dlVal").textContent = nd.toFixed(1);
+    $("#ulVal").textContent = nu.toFixed(1);
+    draw();
+  }
+  draw();
+  if (!reduce) setInterval(tick, 1000); else tick();
+
+  renderServers();
+  paintServer();
+})();
+</script>
+
+</body>
+</html>

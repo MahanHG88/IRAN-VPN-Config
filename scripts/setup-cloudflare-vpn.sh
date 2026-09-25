@@ -226,6 +226,11 @@ else
   jq -n --argjson inb "$our_inbound" '{log:{loglevel:"warning"},inbounds:[$inb],outbounds:[{protocol:"freedom",tag:"direct"}]}' > "$XRAY_CONF"
 fi
 
+# Xray's service runs as an unprivileged user (nobody) — it must be able to read
+# the config and traverse its directory (mktemp+mv can leave it root-only 600).
+chmod 755 "$(dirname "$XRAY_CONF")" 2>/dev/null || true
+chmod 644 "$XRAY_CONF" 2>/dev/null || true
+
 if ! xray -test -config "$XRAY_CONF" >/tmp/cfvpn-xray-test.log 2>&1; then
   warn "Xray config test FAILED — restoring backup and aborting:"; cat /tmp/cfvpn-xray-test.log >&2
   [ -f "$XRAY_CONF.bak.$STAMP" ] && cp -a "$XRAY_CONF.bak.$STAMP" "$XRAY_CONF"
@@ -275,7 +280,8 @@ ensure_caddy_service
 
 # Make cert + decoy readable by the caddy user (if it runs unprivileged).
 if id caddy >/dev/null 2>&1; then
-  chown root:caddy "$CERT_DIR/origin.key" "$CERT_DIR/origin.pem" 2>/dev/null || true
+  # chown the DIRECTORY too, not just the files — caddy must traverse it to read them.
+  chown root:caddy "$CERT_DIR" "$CERT_DIR/origin.key" "$CERT_DIR/origin.pem" 2>/dev/null || true
   chmod 750 "$CERT_DIR" 2>/dev/null || true
   chmod 640 "$CERT_DIR/origin.key" 2>/dev/null || true
   chmod 644 "$CERT_DIR/origin.pem" 2>/dev/null || true

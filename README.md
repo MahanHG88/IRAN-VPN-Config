@@ -80,6 +80,10 @@ passwords, and SNIs with your own. **Never commit real secrets.**
   one-paste server setup for the **Cloudflare-fronted VLESS+WS+TLS** VPN
   (installs Xray + Caddy, makes the cert, prints the client link/QR; see
   [docs/04](docs/04-cdn-fronting-vless-ws.md)).
+- [`scripts/cloudflare-configure.py`](scripts/cloudflare-configure.py) — prompts
+  for your Cloudflare API token (hidden, never stored) and auto-configures the
+  proxied A record, SSL mode Full, WebSockets, and the Origin Rule. Run it
+  yourself; the token stays on your machine.
 - [`scripts/icmp-tunnel.sh`](scripts/icmp-tunnel.sh) — set up the last-resort
   ICMP tunnel (Linux; see [docs/07](docs/07-icmp-dns-tunneling.md)).
 - [`scripts/icmp-tunnel-app.py`](scripts/icmp-tunnel-app.py) — a local web

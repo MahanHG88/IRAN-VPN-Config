@@ -142,12 +142,23 @@ holder="$(port_holder "$PUBLIC_PORT")"
 if [ -n "$holder" ] && [ "$holder" != "caddy" ]; then
   if [ "$PORT_SET" -eq 0 ]; then
     warn "port ${PUBLIC_PORT} is held by '${holder}' (likely your Reality)."
-    PUBLIC_PORT=8443
+    # Try each Cloudflare-supported HTTPS origin port; pick the first free one.
+    chosen=""
+    for cand in 8443 2053 2083 2087 2096; do
+      h="$(port_holder "$cand")"
+      if [ -z "$h" ] || [ "$h" = "caddy" ]; then chosen="$cand"; break; fi
+      warn "  origin port ${cand} is busy (${h}) — trying next"
+    done
+    # All the standard ones busy? Origin Rules can target ANY origin port, so
+    # fall back to a free high port.
+    if [ -z "$chosen" ]; then
+      chosen=9443
+      while [ -n "$(port_holder "$chosen")" ]; do chosen=$((chosen+1)); done
+      warn "  all standard CF ports busy — using free port ${chosen} (Origin Rule handles it)"
+    fi
+    PUBLIC_PORT="$chosen"
     NEED_ORIGIN_RULE=1
     warn "-> Caddy will use origin port ${PUBLIC_PORT}; add a Cloudflare Origin Rule (shown at the end)."
-    if [ -n "$(port_holder "$PUBLIC_PORT")" ] && [ "$(port_holder "$PUBLIC_PORT")" != "caddy" ]; then
-      die "fallback port ${PUBLIC_PORT} is also busy. Pass --port <443|8443|2053|2083|2087|2096>."
-    fi
   else
     warn "port ${PUBLIC_PORT} is held by '${holder}'. Caddy may fail to bind; continuing as you asked."
   fi
